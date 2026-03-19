@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { Resend } from 'resend';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { kv } from '@vercel/kv';
 
 export const maxDuration = 60; // Max allowed for Vercel Hobby/Pro timeout
