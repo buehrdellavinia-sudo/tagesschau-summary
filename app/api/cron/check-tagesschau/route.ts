@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Stabiler für Video
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     // 1. YouTube Abruf (vereinfacht für den Test)
     const playlistId = 'PL4A2F331EE86DCC22';
