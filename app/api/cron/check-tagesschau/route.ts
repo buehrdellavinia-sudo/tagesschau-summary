@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { Resend } from 'resend';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
 
 export const maxDuration = 60; // Max allowed for Vercel Hobby/Pro timeout
@@ -37,7 +37,8 @@ export async function GET(request: Request) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
     // 2. Gemini Analyse
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
     
     const prompt = `Analysiere das folgende aktuelle Tagesschau-Video: "${videoTitle}" (URL: ${videoUrl}).
 Erstelle eine detaillierte Zusammenfassung der behandelten Themen.
@@ -45,12 +46,8 @@ Erstelle ZUDEM eine visuelle Beschreibung der Folge (wer spricht, Mimik, Einblen
 Sollte der direkte Videoabruf nicht komplett möglich sein, ziehe die wichtigsten Informationen aus Titel und bekanntem Kontext und beschreibe das typische visuelle Format der Tagesschau für die jeweiligen Elemente.
 Achte darauf, dass die Zusammenfassung professionell und präzise ist.`;
 
-    const chatResponse = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite-preview',
-      contents: [prompt],
-    });
-
-    const summaryText = chatResponse.text;
+    const chatResponse = await model.generateContent(prompt);
+    const summaryText = chatResponse.response.text();
 
     // 3. Save to Vercel KV Database (for frontend display)
     let saved = false;
