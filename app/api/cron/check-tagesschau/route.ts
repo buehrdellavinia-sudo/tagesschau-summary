@@ -2,41 +2,60 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Redis from 'ioredis';
 
-const redis = new Redis(process.env.REDIS_URL || '');
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  console.log("--- START: Cron Job läuft an ---");
+  
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    console.error("Fehler: Unauthorized");
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
+    const redis = new Redis(process.env.REDIS_URL || '');
+    console.log("1. Redis verbunden");
+
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    // Wir nutzen gemini-1.5-flash für stabile Video-Analyse
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    console.log("2. Gemini bereit");
 
     const playlistId = 'PL4A2F331EE86DCC22';
     const ytUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=1&playlistId=${playlistId}&key=${process.env.YOUTUBE_API_KEY}`;
+    
     const ytRes = await fetch(ytUrl);
     const ytData = await ytRes.json();
     
-    const video = ytData.items[0].snippet;
-    const videoId = video.resourceId.videoId;
-
-    // PRÜFUNG: Haben wir dieses Video schon analysiert?
-    const existingData = await redis.get('tagesschau_archive');
-    let archive = existingData ? JSON.parse(existingData) : [];
-    
-    const isAlreadyAnalyzed = archive.some((item: any) => item.id === videoId);
-
-    if (isAlreadyAnalyzed) {
-      return NextResponse.json({ message: "Kein neues Video gefunden." });
+    if (!ytData.items || ytData.items.length === 0) {
+      throw new Error("YouTube hat keine Daten geliefert");
     }
 
-    // KI-ANALYSE
-    const prompt = `Analysiere die Tagesschau: "${video.title}". Erstelle eine strukturierte Zusammenfassung in Bullet Points und beschreibe visuelle Besonderheiten des Studios und der Einblendungen. Antworte auf Deutsch.`;
+    const video = ytData.items[0].snippet;
+    const videoId = video.resourceId.videoId;
+    console.log("3. YouTube Video gefunden:", video.title);
+
+    // Archiv-Logik
+    const existingData = await redis.get('tagesschau_archive');
+    let archive = [];
+    try {
+      archive = existingData ? JSON.parse(existingData) : [];
+    } catch (e) {
+      console.log("Hinweis: Archiv war kein gültiges JSON, starte neu.");
+      archive = [];
+    }
+
+    const isAlreadyAnalyzed = archive.some((item: any) => item.id === videoId);
+    if (isAlreadyAnalyzed) {
+      console.log("4. Video bereits im Archiv. Ende.");
+      return NextResponse.json({ message: "Bereits aktuell" });
+    }
+
+    console.log("5. Starte KI-Analyse...");
+    const prompt = `Analysiere die Tagesschau vom ${new Date().toLocaleDateString('de-DE')}: "${video.title}". Fasse die Themen zusammen und beschreibe das Studio-Design. Antworte als sachlicher Nachrichten-Analyst auf Deutsch.`;
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
+    console.log("6. KI-Analyse fertig");
 
     const newEntry = {
       id: videoId,
@@ -47,28 +66,37 @@ export async function GET(request: Request) {
       thumbnail: video.thumbnails?.high?.url || video.thumbnails?.default?.url
     };
 
-    // Oben im Archiv einfügen und auf max 10 Einträge begrenzen
     archive.unshift(newEntry);
-    archive = archive.slice(0, 10); 
+    archive = archive.slice(0, 10);
     await redis.set('tagesschau_archive', JSON.stringify(archive));
+    console.log("7. In Redis gespeichert");
 
-    // E-MAIL VERSAND via Resend
-    await fetch('https://api.resend.com/emails', {
+    console.log("8. Sende E-Mail...");
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
       },
       body: JSON.stringify({
-        from: 'Tagesschau Archiv <onboarding@resend.dev>',
+        from: 'Tagesschau <onboarding@resend.dev>',
         to: 'lbuehrde@hs-mittweida.de',
-        subject: `NEU: ${video.title}`,
-        text: `Eine neue Zusammenfassung ist verfügbar:\n\n${summary}\n\nLink: ${newEntry.url}`
+        subject: `Tagesschau News: ${video.title}`,
+        text: summary
       })
     });
+    
+    if (emailRes.ok) {
+      console.log("9. E-Mail erfolgreich versendet!");
+    } else {
+      console.error("Fehler beim E-Mail-Versand");
+    }
 
-    return NextResponse.json({ success: true, added: video.title });
+    console.log("--- FINISH: Erfolg! ---");
+    return NextResponse.json({ success: true });
+
   } catch (error: any) {
+    console.error("ABBRUCH Fehler:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
