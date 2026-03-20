@@ -3,44 +3,65 @@ import Redis from 'ioredis';
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  // Wir nutzen NUR ioredis mit deiner REDIS_URL
   const redis = new Redis(process.env.REDIS_URL || '');
-  let data = null;
-
-  try {
-    const rawData = await redis.get('latest_summary');
-    data = rawData ? JSON.parse(rawData) : null;
-  } catch (e) {
-    console.error("Datenbank-Fehler:", e);
-  }
+  const rawData = await redis.get('tagesschau_archive');
+  const archive = rawData ? JSON.parse(rawData) : [];
 
   return (
-    <main style={{ padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1 style={{ color: '#1e40af', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-        Tagesschau Zusammenfassung
-      </h1>
-      
-      {data ? (
-        <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <h2 style={{ color: '#111827', marginBottom: '8px' }}>{data.title}</h2>
-          <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '16px' }}>
-            {new Date(data.date).toLocaleString('de-DE')}
-          </p>
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#374151' }}>
-            {data.summary}
-          </div>
-          <div style={{ marginTop: '24px' }}>
-            <a href={data.url} target="_blank" style={{ color: '#2563eb', fontWeight: 'bold', textDecoration: 'underline' }}>
-              Video auf YouTube ansehen →
-            </a>
-          </div>
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+      {/* Header */}
+      <header className="bg-[#003865] text-white py-12 px-6 shadow-md">
+        <div className="max-w-5xl mx-auto">
+          <h1 className="text-4xl md:text-5xl font-bold mb-2">Tagesschau Archiv</h1>
+          <p className="text-blue-200 text-lg">KI-generierte Analysen & visuelle Beschreibungen der neuesten Ausgaben.</p>
         </div>
-      ) : (
-        <div style={{ marginTop: '40px', padding: '40px', textAlign: 'center', border: '2px dashed #d1d5db', borderRadius: '12px', color: '#9ca3af' }}>
-          <p>Noch keine Zusammenfassung gespeichert.</p>
-          <p style={{ fontSize: '0.8rem' }}>Der nächste automatische Check läuft um 20:15 Uhr.</p>
-        </div>
-      )}
-    </main>
+      </header>
+
+      <main className="max-w-5xl mx-auto py-12 px-6">
+        {archive.length > 0 ? (
+          <div className="grid gap-12">
+            {archive.map((item: any, index: number) => (
+              <article key={item.id} className={`bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col md:flex-row ${index === 0 ? 'ring-2 ring-blue-500' : ''}`}>
+                
+                {/* Thumbnail */}
+                <div className="md:w-1/3 bg-gray-200">
+                  <img src={item.thumbnail} alt="Video Preview" className="w-full h-full object-cover" />
+                </div>
+
+                {/* Content */}
+                <div className="p-8 md:w-2/3 flex flex-col">
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-2xl font-bold text-gray-800 leading-tight">{item.title}</h2>
+                    {index === 0 && <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase">Neu</span>}
+                  </div>
+                  
+                  <p className="text-sm text-gray-500 mb-6">Analysiert am {new Date(item.date).toLocaleString('de-DE')}</p>
+                  
+                  <div className="prose prose-blue max-w-none text-gray-700 leading-relaxed whitespace-pre-wrap flex-grow">
+                    {item.summary}
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-gray-100">
+                    <a href={item.url} target="_blank" className="inline-flex items-center text-blue-700 font-bold hover:text-blue-900 transition-colors">
+                      Auf YouTube ansehen
+                      <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-24 bg-white rounded-3xl border-2 border-dashed border-gray-300">
+            <p className="text-xl text-gray-400">Das Archiv wird gerade aufgebaut...</p>
+            <p className="text-sm text-gray-400 mt-2">Der Roboter sucht alle 2 Stunden nach neuen Sendungen.</p>
+          </div>
+        )}
+      </main>
+
+      <footer className="py-12 text-center text-gray-400 text-sm">
+        &copy; 2026 Tagesschau KI-Summary Project | Agentic Engineering Seminar
+      </footer>
+    </div>
   );
 }
