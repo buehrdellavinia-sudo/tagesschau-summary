@@ -6,40 +6,24 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // DIAGNOSE START
-    if (!process.env.REDIS_URL) return NextResponse.json({ e: "REDIS_URL fehlt" });
-    if (!process.env.YOUTUBE_API_KEY) return NextResponse.json({ e: "YOUTUBE_API_KEY fehlt" });
-    if (!process.env.GEMINI_API_KEY) return NextResponse.json({ e: "GEMINI_API_KEY fehlt" });
-
-    const redis = new Redis(process.env.REDIS_URL);
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const redis = new Redis(process.env.REDIS_URL || '');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // YouTube Test
     const playlistId = 'PL4A2F331EE86DCC22';
-    const ytRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=1&playlistId=${playlistId}&key=${process.env.YOUTUBE_API_KEY}`);
+    const ytUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=1&playlistId=${playlistId}&key=${process.env.YOUTUBE_API_KEY}`;
+    const ytRes = await fetch(ytUrl);
     const ytData = await ytRes.json();
-    
-    if (ytData.error) return NextResponse.json({ e: "YouTube Fehler", msg: ytData.error.message });
-
     const video = ytData.items[0].snippet;
-    
-    // Gemini Test
-    const result = await model.generateContent("Hallo, antworte mit 'KI bereit'.");
-    const aiTest = result.response.text();
 
-    return NextResponse.json({ 
-      status: "Soweit alles okay!", 
-      videoGefunden: video.title,
-      kiAntwort: aiTest 
-    });
+    const result = await model.generateContent(`Fasse die Themen dieser Tagesschau zusammen: "${video.title}". Antworte auf Deutsch.`);
+    const summary = result.response.text();
 
-  } catch (error: any) {
-    // Wenn irgendwo ein Fehler passiert, schreiben wir ihn direkt auf den Bildschirm!
-    return NextResponse.json({ 
-      status: "FEHLER GEFUNDEN!",
-      meldung: error.message,
-      code: error.code
-    });
+    const data = { title: video.title, summary: summary, date: new Date().toISOString() };
+    await redis.set('latest_summary', JSON.stringify(data));
+
+    return NextResponse.json({ status: "Erfolg!", video: video.title });
+  } catch (e: any) {
+    return NextResponse.json({ status: "Fehler", info: e.message }, { status: 500 });
   }
 }
