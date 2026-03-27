@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/check-tagesschau",
-      "schedule": "0 */2 * * *"
+      "schedule": "15 19 * * *"
     }
   ]
 }
